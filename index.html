@@ -18374,7 +18374,270 @@ CHAR 9835
 
 </head>
 
+<script>
+	this.hacks = this.hacks || {};
+	(function (exports, bitsy) {
+		'use strict';
+		var hackOptions = {
+			// Put entries in this list for each audio file you want to use
+			// the key will be the id needed to play it,
+			// and the value will be the properties of the corresponding <audio> tag (e.g. src, loop, volume)
+			// `src` can be either a string, or an array of strings (to support fallbacks in different formats)
+			audio: {
+				// Replace these examples with your own audio files
+				'song1': { src: './song1.mp3', loop: true },
+				'song2': { src: './song2.mp3', loop: true, volume: 0.8 },
+			},
+			// Put entries in this list for every room ID or name that will change the music
+			// If the player moves between rooms with the same audio ID, the music keeps playing seamlessly.
+			musicByRoom: {
+				// Replace these examples with your own room -> audio id mappings
+				0: 'song1',
+				1: 'S', // This room is silent - it will stop music when you enter
+				2: 'song2',
+			},
+			silenceId: 'S', // Use this song ID to make a room fall silent.
+			resume: false, // If true, songs will pause/resume on change; otherwise, they'll stop/play
+		};
 
+		/**
+		 * Helper used to replace code in a script tag based on a search regex.
+		 */
+		function inject$1(searcher, replacer) {
+			var scriptTags = document.getElementsByTagName('script');
+			var scriptTag;
+			var code = '';
+			for (var i = 0; i < scriptTags.length; ++i) {
+				scriptTag = scriptTags[i];
+				if (!scriptTag.textContent)
+					continue;
+				var matchesSearch = scriptTag.textContent.search(searcher) !== -1;
+				var isCurrentScript = scriptTag === document.currentScript;
+				if (matchesSearch && !isCurrentScript) {
+					code = scriptTag.textContent;
+					break;
+				}
+			}
+			if (!code || !scriptTag) {
+				throw new Error('Couldn\'t find "' + searcher + '" in script tags');
+			}
+			code = code.replace(searcher, replacer);
+			var newScriptTag = document.createElement('script');
+			newScriptTag.textContent = code;
+			scriptTag.insertAdjacentElement('afterend', newScriptTag);
+			scriptTag.remove();
+		}
+
+		function unique(array) {
+			return array.filter(function (item, idx) {
+				return array.indexOf(item) === idx;
+			});
+		}
+
+		function kitsyInject(searcher, replacer) {
+			if (!kitsy.queuedInjectScripts.some(function (script) {
+				return searcher.toString() === script.searcher.toString() && replacer === script.replacer;
+			})) {
+				kitsy.queuedInjectScripts.push({
+					searcher: searcher,
+					replacer: replacer,
+				});
+			}
+		}
+
+		function after$1(targetFuncName, afterFn) {
+			kitsy.queuedAfterScripts[targetFuncName] = kitsy.queuedAfterScripts[targetFuncName] || [];
+			kitsy.queuedAfterScripts[targetFuncName].push(afterFn);
+		}
+
+		function applyInjects() {
+			kitsy.queuedInjectScripts.forEach(function (injectScript) {
+				inject$1(injectScript.searcher, injectScript.replacer);
+			});
+		}
+
+		function applyHooks(root) {
+			var allHooks = unique(Object.keys(kitsy.queuedAfterScripts));
+			allHooks.forEach(applyHook.bind(this, root || window));
+		}
+
+		function applyHook(root, functionName) {
+			var functionNameSegments = functionName.split('.');
+			var obj = root;
+			while (functionNameSegments.length > 1) {
+				obj = obj[functionNameSegments.shift()];
+			}
+			var lastSegment = functionNameSegments[0];
+			var superFn = obj[lastSegment];
+			var superFnLength = superFn ? superFn.length : 0;
+			var functions = [];
+
+			if (superFn) {
+				functions.push(superFn);
+			}
+			functions = functions.concat(kitsy.queuedAfterScripts[functionName] || []);
+
+			obj[lastSegment] = function () {
+				var returnVal;
+				var args = [].slice.call(arguments);
+				var i = 0;
+				function runAfter() {
+					if (i === functions.length) {
+						return returnVal;
+					}
+					if (arguments.length > 0) {
+						args = [].slice.call(arguments);
+					}
+					if (functions[i].length > superFnLength) {
+						return functions[i++].apply(this, args.concat(runAfter.bind(this)));
+					}
+					returnVal = functions[i++].apply(this, args);
+					if (returnVal && returnVal.length) {
+						args = returnVal;
+					}
+					return runAfter.apply(this, args);
+				}
+				return runAfter.apply(this, arguments);
+			};
+		}
+
+		var kitsy = (window.kitsy = window.kitsy || {
+			queuedInjectScripts: [],
+			queuedAfterScripts: {},
+			inject: kitsyInject,
+			after: after$1,
+			applyInjects,
+			applyHooks,
+		});
+
+		var hooked = kitsy.hooked;
+		if (!hooked) {
+			kitsy.hooked = true;
+			var oldStartFunc = bitsy.startExportedGame;
+			bitsy.startExportedGame = function doAllInjections() {
+				bitsy.startExportedGame = oldStartFunc;
+				kitsy.applyInjects();
+				bitsy.scriptModule = new bitsy.Script();
+				bitsy.scriptInterpreter = bitsy.scriptModule.CreateInterpreter();
+				bitsy.dialogModule = new bitsy.Dialog();
+				bitsy.dialogRenderer = bitsy.dialogModule.CreateRenderer();
+				bitsy.dialogBuffer = bitsy.dialogModule.CreateBuffer();
+				bitsy.renderer = new bitsy.TileRenderer(bitsy.tilesize);
+				bitsy.transition = new bitsy.TransitionManager();
+				kitsy.applyHooks();
+				bitsy.startExportedGame.apply(this, arguments);
+			};
+		}
+
+		var after = kitsy.after;
+
+		function getRoom(name) {
+			var id = Object.prototype.hasOwnProperty.call(bitsy.room, name) ? name : bitsy.names.room[name];
+			return bitsy.room[id];
+		}
+
+		function createAudio(id, options) {
+			var el = document.getElementById(id);
+			if (el) el.remove();
+
+			el = document.createElement('audio');
+			var src = options.src;
+			el.id = id;
+			Object.assign(el, options);
+			if (typeof src !== 'string') {
+				el.removeAttribute('src');
+				src.forEach(function (s) {
+					var sourceEl = document.createElement('source');
+					sourceEl.src = s;
+					sourceEl.type = 'audio/' + s.split('.').pop();
+					el.appendChild(sourceEl);
+				});
+			}
+			document.body.appendChild(el);
+			return el;
+		}
+
+		var audioElementsById = {};
+		var currentMusic;
+		var roomMusicFlag = null;
+
+		after('load_game', function () {
+			var room;
+			// expand the map to include ids of rooms listed by name
+			Object.entries(hackOptions.musicByRoom).forEach(function (entry) {
+				room = getRoom(entry[0]);
+				if (room) {
+					hackOptions.musicByRoom[room.id] = entry[1];
+				}
+			});
+			// add audio tags from options
+			Object.entries(hackOptions.audio).forEach(function (entry) {
+				audioElementsById[entry[0]] = createAudio(entry[0], entry[1]);
+			});
+
+			// handle autoplay restrictions by playing then pausing
+			// every audio element on the first user interaction
+			function handleAutoPlayRestrictions() {
+				Object.values(audioElementsById).forEach(function (audio) {
+					audio.play();
+					// let the current song play
+					if (currentMusic === audio.id) {
+						return;
+					}
+					audio.pause();
+					audio.currentTime = 0;
+				});
+				document.body.removeEventListener('pointerup', handleAutoPlayRestrictions);
+				document.body.removeEventListener('keydown', handleAutoPlayRestrictions);
+			}
+
+			document.body.addEventListener('pointerup', handleAutoPlayRestrictions);
+			document.body.addEventListener('keydown', handleAutoPlayRestrictions);
+		});
+
+		function getAudio(id) {
+			var el = audioElementsById[id] || (audioElementsById[id] = document.getElementById(id));
+			if (!el) {
+				throw new Error("bitsymuse tried to use audio with id '" + id + "' but couldn't find one on the page!");
+			}
+			return el;
+		}
+
+		function changeMusic(newMusic) {
+			var audio;
+			if (!newMusic || newMusic === currentMusic) {
+				return;
+			}
+
+			// stop old music
+			if (currentMusic && currentMusic !== hackOptions.silenceId) {
+				audio = getAudio(currentMusic);
+				audio.pause();
+				if (!hackOptions.resume) {
+					audio.currentTime = 0.0;
+				}
+			}
+
+			// start new music
+			currentMusic = newMusic;
+			// special case: don't start anything new
+			if (newMusic === hackOptions.silenceId) {
+				return;
+			}
+			getAudio(newMusic).play();
+		}
+
+		after('drawRoom', function () {
+			if (roomMusicFlag !== bitsy.state.room) {
+				changeMusic(hackOptions.musicByRoom[bitsy.state.room]);
+				roomMusicFlag = bitsy.state.room;
+			}
+		});
+
+		exports.hackOptions = hackOptions;
+
+	})(this.hacks.bitsymuse = this.hacks.bitsymuse || {}, window);
+</script>
 <!-- DOCUMENT BODY -->
 
 <body onload='startExportedGame()'>
