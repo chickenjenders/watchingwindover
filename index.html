@@ -6557,7 +6557,7 @@ AAAAAAAAAAHHHHHHHHHHHGGGGGGGGG!!!{pg}{exit "i" 0 0}{ava "57"}
 NAME item a dialog
 
 DLG k
-YOU: YOU KILLED MY LANDSCAPER, YOU SON OF A BITCH!!!{pg}{exit "m" 11 11}{ava "5b"}
+{audio "collect"}YOU: YOU KILLED MY LANDSCAPER, YOU SON OF A BITCH!!!{pg}{exit "m" 11 11}{ava "5b"}
 NAME item b dialog
 
 DLG m
@@ -18386,7 +18386,14 @@ CHAR 9835
 			audio: {
 				// Replace these examples with your own audio files
 				'rooms': { src: './rooms.wav', loop: true, volume: 0.25 },
-				'song2': { src: './song2.mp3', loop: true, volume: 0.8 },
+				'outside': { src: './outside.mp3', loop: true, volume: 0.25 },
+				'buildup': { src: './buildup.wav', loop: false, volume: 0.5 },
+				'action': { src: './action.wav', loop: true, volume: 0.5 },
+				'exorcism': { src: './exorcism.wav', loop: true, volume: 0.5 },
+				'reveal': { src: './reveal.wav', loop: false, volume: 0.5 },
+				'end': { src: './end.mp3', loop: true, volume: 0.5 },
+				'scare': { src: './scare.wav', loop: true, volume: 0.5 },
+				'collect': { src: './stab.wav', loop: false, volume: 0.7 },
 			},
 			// Put entries in this list for every room ID or name that will change the music
 			// If the player moves between rooms with the same audio ID, the music keeps playing seamlessly.
@@ -18395,26 +18402,26 @@ CHAR 9835
 				0: 'rooms',
 				2: 'rooms',
 				3: 'rooms',
-				4: '',
-				5: '',
-				6: '',
-				7: '',
-				8: '',
-				9: '',
+				4: 'outside',
+				5: 'outside',
+				6: 'action',
+				7: 'action',
+				8: 'buildup',
+				9: 'scare',
 				a: 'rooms',
-				b: '',
-				c: '',
-				d: '',
-				e: '',
-				f: '',
-				g: '',
-				h: '',
-				i: '',
-				j: '',
-				k: '',
-				l: '',
-				m: '',
-				n: '',
+				b: 'outside',
+				c: 'action',
+				d: 'action',
+				e: 'action',
+				f: 'action',
+				g: 'action',
+				h: 'S',
+				i: 'reveal',
+				j: 'S',
+				k: 'S',
+				l: 'end',
+				m: 'S',
+				n: 'exorcism',
 			},
 			silenceId: 'S', // Use this song ID to make a room fall silent.
 			resume: false, // If true, songs will pause/resume on change; otherwise, they'll stop/play
